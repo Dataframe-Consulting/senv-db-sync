@@ -6,9 +6,11 @@ logs/
 .env.*
 .DS_Store
 *.pyc
-# Ignorar carpetas de documentación y scripts
+# Ignorar carpetas de documentación
 /docs/
-/scripts/
+# Ignorar scripts de prueba (mantener create_all_tables.sql)
+/scripts/*
+!/scripts/create_all_tables.sql
 # Carpetas inservibles
 /tests/
 /node_modules/
