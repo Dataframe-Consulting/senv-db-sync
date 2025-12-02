@@ -12,6 +12,7 @@ jobs:
   sync-data:
     runs-on: ubuntu-latest
     timeout-minutes: 180  # 3 horas máximo
+    environment: production  # Usar el environment configurado
     
     steps:
       - name: 📥 Checkout código
