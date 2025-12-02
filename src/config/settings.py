@@ -52,13 +52,13 @@ class SupabaseConfig:
 @dataclass
 class SyncConfig:
     """Configuración general de sincronización."""
-    batch_size: int = 100
+    batch_size: int = 1000  # Aumentado de 100 a 1000 para mayor velocidad
     log_level: str = 'INFO'
 
     @classmethod
     def from_env(cls):
         """Crea configuración desde variables de entorno."""
         return cls(
-            batch_size=int(os.getenv('BATCH_SIZE', 100)),
+            batch_size=int(os.getenv('BATCH_SIZE', 1000)),
             log_level=os.getenv('LOG_LEVEL', 'INFO')
         )

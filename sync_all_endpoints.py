@@ -81,7 +81,7 @@ class EndpointSyncManager:
             offset = 0
             total_fetched = 0
             total_inserted = 0
-            report_interval = 1000
+            report_interval = 5000
             last_report = 0
             
             endpoint_start = datetime.now()
@@ -110,11 +110,11 @@ class EndpointSyncManager:
                     offset += sync_config.batch_size
                     continue
                 
-                # Insertar con UPSERT (evita duplicados)
+                # Insertar con UPSERT (evita duplicados) - batch más grande
                 try:
                     inserted = supabase_client.batch_upsert(
                         transformed,
-                        batch_size=100,
+                        batch_size=1000,  # Aumentado de 100 a 1000
                         conflict_column='id'
                     )
                     total_inserted += inserted
@@ -132,7 +132,7 @@ class EndpointSyncManager:
                 
                 # Avanzar offset
                 offset += sync_config.batch_size
-                time.sleep(0.05)  # Pequeña pausa para no sobrecargar
+                # Sin pausa para máxima velocidad
             
             # Calcular estadísticas
             elapsed = (datetime.now() - endpoint_start).total_seconds()

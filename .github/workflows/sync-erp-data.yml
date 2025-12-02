@@ -37,10 +37,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          BATCH_SIZE: 100
+          BATCH_SIZE: 1000
           MAX_RETRIES: 3
           RETRY_DELAY: 2
-          REQUEST_TIMEOUT: 60
+          REQUEST_TIMEOUT: 120
           LOG_LEVEL: INFO
         run: |
           python sync_all_endpoints.py
