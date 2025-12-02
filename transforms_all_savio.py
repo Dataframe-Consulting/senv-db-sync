@@ -30,7 +30,7 @@ def transform_log_cambios_etapa(record: Dict[str, Any]) -> Dict[str, Any]:
     Transforma registros de v_log_cambios_etapa.
     
     URL Pattern: /v_log_cambios_etapa/{no_orden},{dec_seq},{vip_seq},{no_etapa}
-    ID Compuesto: {no_orden_produccion}_{dec_seq}_{vip_seq}_{no_etapa}_{fec_modif}
+    ID Compuesto: {no_orden_produccion}_{dec_seq}_{vip_seq}_{no_etapa}
     
     Campos del API:
     - no_etapa, no_orden_produccion, no_cotizacion, dec_seq, vip_seq
@@ -38,15 +38,14 @@ def transform_log_cambios_etapa(record: Dict[str, Any]) -> Dict[str, Any]:
     - no_etapa_actual, no_optimizacion, espesor, base, altura, m2
     - taladros_cot, canto_pulido, filo_muerto
     """
-    # Generar ID único compuesto basado en la URL del endpoint
+    # Generar ID único compuesto basado en la URL del endpoint (SIN fecha para evitar duplicados)
     no_orden = record.get('no_orden_produccion')
     dec_seq = record.get('dec_seq')
     vip_seq = record.get('vip_seq')
     no_etapa = record.get('no_etapa')
-    fec_modif = record.get('fec_modif', '')
     
-    # Crear ID único que previene duplicados
-    record_id = f"{no_orden}_{dec_seq}_{vip_seq}_{no_etapa}_{fec_modif}"
+    # Crear ID único que previene duplicados (sin fec_modif)
+    record_id = f"{no_orden}_{dec_seq}_{vip_seq}_{no_etapa}"
     
     return {
         'id': record_id,
@@ -83,6 +82,9 @@ def transform_log_vidrios_produccion(record: Dict[str, Any]) -> Dict[str, Any]:
     URL Pattern: /log_vidrios_produccion/{no_orden},{no_cotizacion},{dec_seq},{vip_seq},{campo},{fec_modif}
     ID Compuesto: {no_orden_produccion}_{no_cotizacion}_{dec_seq}_{vip_seq}_{campo}_{fec_modif}
     
+    NOTA: Este endpoint SÍ incluye fec_modif en el ID porque es un LOG de cambios,
+    cada cambio con diferente fecha es un registro diferente (no es duplicado).
+    
     Campos del API:
     - no_orden_produccion, no_cotizacion, dec_seq, vip_seq
     - campo, fec_modif, valor_anterior, valor_nuevo
@@ -95,7 +97,7 @@ def transform_log_vidrios_produccion(record: Dict[str, Any]) -> Dict[str, Any]:
     campo = record.get('campo', '')
     fec_modif = record.get('fec_modif', '')
     
-    # ID basado en la URL del endpoint
+    # ID basado en la URL del endpoint (incluye fecha porque es un log de cambios)
     record_id = f"{no_orden}_{no_cotizacion}_{dec_seq}_{vip_seq}_{campo}_{fec_modif}"
     
     return {

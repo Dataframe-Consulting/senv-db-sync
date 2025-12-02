@@ -93,3 +93,27 @@ class SupabaseClient:
         except Exception as e:
             print(f"❌ Error al contar registros: {e}")
             return 0
+    
+    def get_max_date(self, date_column: str = 'fec_modif') -> str:
+        """
+        Obtiene la fecha máxima de un campo de fecha.
+        
+        Args:
+            date_column: Nombre de la columna de fecha
+            
+        Returns:
+            Fecha máxima en formato ISO o None
+        """
+        try:
+            response = self.client.table(self.config.table_name)\
+                .select(date_column)\
+                .order(date_column, desc=True)\
+                .limit(1)\
+                .execute()
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0].get(date_column)
+            return None
+        except Exception as e:
+            print(f"⚠️  No se pudo obtener fecha máxima: {e}")
+            return None
