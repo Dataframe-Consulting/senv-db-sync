@@ -105,6 +105,16 @@ class EndpointSyncManager:
                 # Transformar registros
                 try:
                     transformed = [transform_fn(r) for r in records]
+                    
+                    # Deduplicar por ID antes de insertar (mantener el último)
+                    unique_records = {}
+                    for record in transformed:
+                        unique_records[record['id']] = record
+                    transformed = list(unique_records.values())
+                    
+                    if len(transformed) < len(records):
+                        print(f"⚠️  Duplicados removidos: {len(records) - len(transformed)}")
+                        
                 except Exception as e:
                     print(f"❌ Error al transformar batch: {e}")
                     offset += sync_config.batch_size
@@ -114,7 +124,7 @@ class EndpointSyncManager:
                 try:
                     inserted = supabase_client.batch_upsert(
                         transformed,
-                        batch_size=1000,  # Aumentado de 100 a 1000
+                        batch_size=500,  # Reducido de 1000 a 500 para evitar timeouts
                         conflict_column='id'
                     )
                     total_inserted += inserted
