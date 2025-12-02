@@ -1,0 +1,16 @@
+# Ignorar archivos y carpetas temporales
+venv/
+__pycache__/
+logs/
+.env
+.env.*
+.DS_Store
+*.pyc
+# Ignorar carpetas de documentación y scripts
+/docs/
+/scripts/
+# Carpetas inservibles
+/tests/
+/node_modules/
+/.vscode/
+.idea/

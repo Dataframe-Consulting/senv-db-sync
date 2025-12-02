@@ -1,0 +1,56 @@
+name: Sincronización ERP APEX → Supabase (cada hora)
+
+on:
+  # Ejecutar cada 60 minutos
+  schedule:
+    - cron: '0 * * * *'  # Cada hora en punto
+  
+  # Permitir ejecución manual desde GitHub UI
+  workflow_dispatch:
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 horas máximo
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 🔄 Sincronizar datos (4 endpoints)
+        env:
+          ORACLE_APEX_USERNAME: ${{ secrets.ORACLE_APEX_USERNAME }}
+          ORACLE_APEX_PASSWORD: ${{ secrets.ORACLE_APEX_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          BATCH_SIZE: 100
+          MAX_RETRIES: 3
+          RETRY_DELAY: 2
+          REQUEST_TIMEOUT: 60
+        run: |
+          python sync_all_endpoints.py
+      
+      - name: 📊 Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs-${{ github.run_number }}
+          path: apex_supabase_sync/logs/
+          retention-days: 30
+      
+      - name: 💬 Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Sync failed at $(date)"
+          echo "Check the logs artifact for details"
