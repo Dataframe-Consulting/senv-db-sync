@@ -85,21 +85,37 @@ python sync_all_endpoints.py
 
 ## ⚙️ GitHub Actions (Automático cada hora)
 
-### Configuración de Secretos
+### Paso 1: Crear las tablas en Supabase
 
-En GitHub: `Settings → Secrets and variables → Actions → New repository secret`
+Antes de ejecutar el workflow, crea las tablas en Supabase:
 
-Agregar los siguientes secretos:
+1. Ve al editor SQL de Supabase
+2. Ejecuta el script `scripts/create_all_tables.sql`
+3. Verifica que las 4 tablas se crearon correctamente
 
-- `ORACLE_APEX_USERNAME`
-- `ORACLE_APEX_PASSWORD`
-- `SUPABASE_URL`
-- `SUPABASE_KEY`
+### Paso 2: Configurar Environment en GitHub
 
-### Workflow
+1. Ve a: `Settings → Environments → New environment`
+2. Nombre: `production` (o el que prefieras)
+3. Haz clic en "Configure environment"
+
+### Paso 3: Agregar Secrets al Environment
+
+En la sección "Environment secrets", agrega los siguientes secrets:
+
+| Secret | Descripción | Ejemplo |
+|--------|-------------|---------|
+| `ORACLE_APEX_BASE_URL` | URL base del Oracle APEX | `https://gsn.maxapex.net/ords/savio` |
+| `ORACLE_APEX_USERNAME` | Usuario de Oracle APEX | Tu usuario |
+| `ORACLE_APEX_PASSWORD` | Contraseña de Oracle APEX | Tu contraseña |
+| `SUPABASE_URL` | URL de tu proyecto Supabase | `https://xxx.supabase.co` |
+| `SUPABASE_KEY` | API Key de Supabase | Tu clave anon/service_role |
+| `SUPABASE_DB_PASSWORD` | Contraseña DB Supabase | Tu contraseña de DB |
+
+### Paso 4: Ejecutar el Workflow
 
 El workflow `.github/workflows/sync-erp-data.yml` se ejecuta:
-- **Automáticamente**: Cada 60 minutos
+- **Automáticamente**: Cada 60 minutos (cron: `0 * * * *`)
 - **Manualmente**: Desde la pestaña "Actions" en GitHub
 
 Los **4 endpoints se sincronizan en una sola ejecución** para mantener la consistencia.

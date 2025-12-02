@@ -7,8 +7,9 @@ Incluye UPSERT automático para evitar duplicados.
 
 import sys
 import os
+import json
 from datetime import datetime
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 import time
 
 # Añadir el directorio actual al path
@@ -21,6 +22,19 @@ from transforms_all_savio import TRANSFORMATIONS, TABLES
 
 # Cargar variables de entorno
 load_dotenv()
+
+
+def load_endpoints_config() -> List[Dict[str, str]]:
+    """Carga la configuración de endpoints desde el archivo JSON."""
+    config_path = os.path.join(
+        os.path.dirname(__file__),
+        'src',
+        'config',
+        'endpoints_tables.json'
+    )
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 class EndpointSyncManager:
@@ -56,23 +70,9 @@ class EndpointSyncManager:
         
         try:
             # Configurar clientes
-            oracle_config = OracleApexConfig(
-                base_url="https://gsn.maxapex.net/ords/savio",
-                endpoint=endpoint_name,
-                username=os.getenv("ORACLE_APEX_USERNAME"),
-                password=os.getenv("ORACLE_APEX_PASSWORD"),
-                timeout=int(os.getenv("REQUEST_TIMEOUT", 60)),
-                max_retries=int(os.getenv("MAX_RETRIES", 3)),
-                retry_delay=int(os.getenv("RETRY_DELAY", 2))
-            )
-            
-            supabase_config = SupabaseConfig(
-                url=os.getenv("SUPABASE_URL"),
-                key=os.getenv("SUPABASE_KEY"),
-                table_name=table_name
-            )
-            
-            sync_config = SyncConfig(batch_size=batch_size)
+            oracle_config = OracleApexConfig.from_env(endpoint_name)
+            supabase_config = SupabaseConfig.from_env(table_name)
+            sync_config = SyncConfig.from_env()
             
             oracle_client = OracleApexClient(oracle_config, sync_config)
             supabase_client = SupabaseClient(supabase_config)
@@ -159,33 +159,37 @@ class EndpointSyncManager:
         print(f"⏰ Iniciado: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print("="*80)
         
-        # Definir endpoints a sincronizar (en orden de prioridad)
-        endpoints = [
-            {
-                'name': 'v_log_cambios_etapa',
-                'table': TABLES['v_log_cambios_etapa'],
-                'transform': TRANSFORMATIONS['v_log_cambios_etapa'],
+        # Cargar configuración de endpoints desde JSON
+        try:
+            endpoints_config = load_endpoints_config()
+            print(f"📋 Endpoints cargados: {len(endpoints_config)}")
+        except Exception as e:
+            print(f"❌ Error al cargar configuración de endpoints: {e}")
+            return 1
+        
+        # Construir lista de endpoints a sincronizar
+        endpoints = []
+        for config in endpoints_config:
+            endpoint_name = config['endpoint']
+            table_name = config['table']
+            
+            # Verificar que existan las transformaciones
+            if endpoint_name not in TRANSFORMATIONS:
+                print(f"⚠️  Warning: No hay transformación para {endpoint_name}, omitiendo...")
+                continue
+            
+            if endpoint_name not in TABLES:
+                print(f"⚠️  Warning: No hay tabla definida para {endpoint_name}, omitiendo...")
+                continue
+            
+            endpoints.append({
+                'name': endpoint_name,
+                'table': table_name,
+                'transform': TRANSFORMATIONS[endpoint_name],
                 'batch_size': 100
-            },
-            {
-                'name': 'detalle_cotizacion',
-                'table': TABLES['detalle_cotizacion'],
-                'transform': TRANSFORMATIONS['detalle_cotizacion'],
-                'batch_size': 100
-            },
-            {
-                'name': 'vidrios_produccion',
-                'table': TABLES['vidrios_produccion'],
-                'transform': TRANSFORMATIONS['vidrios_produccion'],
-                'batch_size': 100
-            },
-            {
-                'name': 'log_vidrios_produccion',
-                'table': TABLES['log_vidrios_produccion'],
-                'transform': TRANSFORMATIONS['log_vidrios_produccion'],
-                'batch_size': 100
-            }
-        ]
+            })
+        
+        print(f"✅ Endpoints válidos a sincronizar: {len(endpoints)}\n")
         
         # Sincronizar cada endpoint
         for endpoint_config in endpoints:

@@ -30,14 +30,17 @@ jobs:
       
       - name: 🔄 Sincronizar datos (4 endpoints)
         env:
+          ORACLE_APEX_BASE_URL: ${{ secrets.ORACLE_APEX_BASE_URL }}
           ORACLE_APEX_USERNAME: ${{ secrets.ORACLE_APEX_USERNAME }}
           ORACLE_APEX_PASSWORD: ${{ secrets.ORACLE_APEX_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           BATCH_SIZE: 100
           MAX_RETRIES: 3
           RETRY_DELAY: 2
           REQUEST_TIMEOUT: 60
+          LOG_LEVEL: INFO
         run: |
           python sync_all_endpoints.py
       
