@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: 🔄 Sincronizar datos (4 endpoints)
+      - name: 🔄 Sincronizar datos (8 endpoints)
         env:
           ORACLE_APEX_BASE_URL: ${{ secrets.ORACLE_APEX_BASE_URL }}
           ORACLE_APEX_USERNAME: ${{ secrets.ORACLE_APEX_USERNAME }}

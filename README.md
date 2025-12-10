@@ -24,12 +24,16 @@ Mantiene actualizada una base de datos Supabase con datos del ERP SAVIO, extraye
 
 ## 📊 Endpoints Sincronizados
 
-| Endpoint | Tabla Supabase | Descripción |
-|----------|----------------|-------------|
-| `v_log_cambios_etapa` | `log_cambios_etapa` | Cambios de etapa en producción |
-| `detalle_cotizacion` | `detalle_cotizacion` | Detalles de cotizaciones |
-| `vidrios_produccion` | `vidrios_produccion` | Vidrios en producción |
-| `log_vidrios_produccion` | `log_vidrios_produccion` | Log de vidrios producidos |
+| # | Endpoint | Tabla Supabase | Descripción | Script |
+|---|----------|----------------|-------------|--------|
+| 1 | `v_log_cambios_etapa` | `log_cambios_etapa` | Cambios de etapa en producción | `sync_endpoint_1.py` |
+| 2 | `detalle_cotizacion` | `detalle_cotizacion` | Detalles de cotizaciones | `sync_endpoint_2.py` |
+| 3 | `vidrios_produccion` | `vidrios_produccion` | Vidrios en producción | `sync_endpoint_3.py` |
+| 4 | `log_vidrios_produccion` | `log_vidrios_produccion` | Log de vidrios producidos | `sync_endpoint_4.py` |
+| 5 | `cotizaciones` | `cotizaciones` | Cotizaciones generales | `sync_endpoint_5.py` |
+| 6 | `clientes` | `clientes` | Catálogo de clientes | `sync_endpoint_6.py` |
+| 7 | `proyectos_cliente` | `proyectos_cliente` | Proyectos por cliente | `sync_endpoint_7.py` |
+| 8 | `v_insumos` | `v_insumos` | Catálogo de insumos | `sync_endpoint_8.py` |
 
 ## 🚀 Características
 
@@ -142,6 +146,44 @@ Esto garantiza que:
 - **Batch size**: 100 registros por lote
 - **Tiempo estimado**: 2-3 horas para sincronización completa inicial
 
+## 🆕 Nuevos Endpoints (Diciembre 2025)
+
+Se agregaron **4 nuevos endpoints** al sistema de sincronización:
+
+### Cotizaciones (`cotizaciones`)
+- 19 campos + metadatos
+- ID único: `no_cotizacion`
+- Incluye: fechas, clientes, proyectos, status, moneda
+
+### Clientes (`clientes`)
+- 22 campos + metadatos
+- ID único: `no_cliente`
+- Incluye: RFC, razón social, régimen fiscal, contactos
+
+### Proyectos Cliente (`proyectos_cliente`)
+- 12 campos + metadatos
+- ID compuesto: `{no_cliente}_{no_proyecto}`
+- Incluye: nombres, anticipos, Skyplanner ID
+
+### Vista Insumos (`v_insumos`)
+- 24 campos + metadatos
+- ID único: `no_insumo`
+- Incluye: claves, descripciones, precios (MXN/USD/EUR), tiempos
+
+### 📚 Documentación Detallada
+
+Para más información sobre los nuevos endpoints:
+- **Guía de configuración**: `docs/NUEVOS_ENDPOINTS.md`
+- **Resumen técnico**: `docs/RESUMEN_IMPLEMENTACION.md`
+- **Inicio rápido**: `docs/INICIO_RAPIDO.md`
+
+### ⚠️ Importante
+
+Para activar los nuevos endpoints, **debes ejecutar primero** el script SQL:
+```bash
+scripts/create_new_tables.sql
+```
+
 ## 🛠️ Tecnologías
 
 - **Python 3.11**
@@ -153,4 +195,4 @@ Esto garantiza que:
 ## 📞 Soporte
 
 **Dataframe Consulting**  
-Diciembre 2025
+Última actualización: 10 de diciembre de 2025
