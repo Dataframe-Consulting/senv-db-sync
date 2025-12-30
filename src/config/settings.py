@@ -14,7 +14,7 @@ class OracleApexConfig:
     endpoint: str
     username: str
     password: str
-    timeout: int = 60
+    timeout: int = 120  # Aumentado de 60 a 120 segundos para batches grandes
     max_retries: int = 3
     retry_delay: int = 2
 
@@ -26,7 +26,7 @@ class OracleApexConfig:
             endpoint=endpoint,
             username=os.getenv('ORACLE_APEX_USERNAME'),
             password=os.getenv('ORACLE_APEX_PASSWORD'),
-            timeout=int(os.getenv('REQUEST_TIMEOUT', 60)),
+            timeout=int(os.getenv('REQUEST_TIMEOUT', 120)),  # Aumentado de 60 a 120
             max_retries=int(os.getenv('MAX_RETRIES', 3)),
             retry_delay=int(os.getenv('RETRY_DELAY', 2))
         )

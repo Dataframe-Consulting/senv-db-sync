@@ -21,13 +21,14 @@ class OracleApexClient:
             'Content-Type': 'application/json'
         })
     
-    def _fetch_batch(self, offset: int = 0) -> Tuple[List[Dict[str, Any]], bool]:
+    def _fetch_batch(self, offset: int = 0, since_date: str = None) -> Tuple[List[Dict[str, Any]], bool]:
         """
         Obtiene un batch de registros desde Oracle APEX.
-        
+
         Args:
             offset: Desplazamiento para paginación
-            
+            since_date: Fecha ISO para filtrar solo registros modificados después de esta fecha
+
         Returns:
             Tupla (registros, éxito)
         """
@@ -36,6 +37,11 @@ class OracleApexClient:
             'offset': offset,
             'limit': self.sync_config.batch_size
         }
+
+        # Filtrado incremental por fecha de modificación
+        if since_date:
+            # Oracle APEX REST usa formato q={"fec_modif":{"$gte":"2025-12-30T00:00:00Z"}}
+            params['q'] = f'{{"fec_modif":{{"$gte":"{since_date}"}}}}'
         
         for attempt in range(self.config.max_retries):
             try:
@@ -68,31 +74,39 @@ class OracleApexClient:
         
         return [], False
     
-    def fetch_all(self) -> List[Dict[str, Any]]:
+    def fetch_all(self, since_date: str = None) -> List[Dict[str, Any]]:
         """
         Obtiene todos los registros del endpoint.
-        
+
+        Args:
+            since_date: Fecha ISO para sincronización incremental (opcional)
+
         Returns:
             Lista con todos los registros
         """
         all_records = []
         offset = 0
-        
+
+        if since_date:
+            print(f"🔄 Sincronización incremental desde: {since_date}")
+        else:
+            print(f"📥 Sincronización completa (todos los registros)")
+
         while True:
-            records, success = self._fetch_batch(offset)
-            
+            records, success = self._fetch_batch(offset, since_date)
+
             if not success:
                 print(f"⚠️  Error al obtener batch en offset {offset}")
                 break
-            
+
             if not records:
                 break
-            
+
             all_records.extend(records)
             offset += self.sync_config.batch_size
-            
+
             print(f"📥 Extraídos {len(all_records)} registros...")
-        
+
         return all_records
     
     def __del__(self):

@@ -76,20 +76,28 @@ class EndpointSyncManager:
             
             oracle_client = OracleApexClient(oracle_config, sync_config)
             supabase_client = SupabaseClient(supabase_config)
-            
+
+            # Obtener última fecha de sincronización para sync incremental
+            last_sync_date = supabase_client.get_max_date('fec_modif')
+            if last_sync_date:
+                print(f"📅 Última sincronización: {last_sync_date}")
+                print(f"🔄 Modo: Incremental (solo cambios desde {last_sync_date})")
+            else:
+                print(f"🆕 Primera sincronización: Descargando todos los registros")
+
             # Variables de progreso
             offset = 0
             total_fetched = 0
             total_inserted = 0
             report_interval = 5000
             last_report = 0
-            
+
             endpoint_start = datetime.now()
-            
+
             # Sincronización con streaming
             while True:
-                # Extraer batch
-                records, success = oracle_client._fetch_batch(offset)
+                # Extraer batch con filtrado incremental
+                records, success = oracle_client._fetch_batch(offset, last_sync_date)
                 
                 if not success:
                     print(f"⚠️  Error al extraer batch en offset {offset}")
@@ -120,16 +128,30 @@ class EndpointSyncManager:
                     offset += sync_config.batch_size
                     continue
                 
-                # Insertar con UPSERT (evita duplicados) - batch más grande
-                try:
-                    inserted = supabase_client.batch_upsert(
-                        transformed,
-                        batch_size=500,  # Reducido de 1000 a 500 para evitar timeouts
-                        conflict_column='id'
-                    )
-                    total_inserted += inserted
-                except Exception as e:
-                    print(f"❌ Error al insertar batch: {e}")
+                # Insertar con UPSERT (evita duplicados) con retry y backoff
+                max_retries = 3
+                retry_count = 0
+                inserted = 0
+
+                while retry_count < max_retries:
+                    try:
+                        inserted = supabase_client.batch_upsert(
+                            transformed,
+                            batch_size=1000,  # Optimizado: restaurado a 1000 con mejor manejo de errores
+                            conflict_column='id'
+                        )
+                        total_inserted += inserted
+                        break  # Éxito, salir del loop de retry
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            print(f"❌ Error al insertar batch después de {max_retries} intentos: {e}")
+                            # Registrar error pero continuar (no perder todo el sync)
+                        else:
+                            wait_time = 2 ** retry_count  # Exponential backoff: 2s, 4s, 8s
+                            print(f"⚠️  Error al insertar batch (intento {retry_count}/{max_retries}): {e}")
+                            print(f"⏳ Reintentando en {wait_time} segundos...")
+                            time.sleep(wait_time)
                 
                 # Reportar progreso
                 if total_inserted >= last_report + report_interval:
@@ -142,7 +164,9 @@ class EndpointSyncManager:
                 
                 # Avanzar offset
                 offset += sync_config.batch_size
-                # Sin pausa para máxima velocidad
+
+                # Rate limiting: pausa de 500ms entre batches para no saturar Supabase
+                time.sleep(0.5)
             
             # Calcular estadísticas
             elapsed = (datetime.now() - endpoint_start).total_seconds()
