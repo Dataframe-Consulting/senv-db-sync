@@ -119,15 +119,27 @@ pip install -r requirements.txt
 
 ### 2. Configurar Variables de Entorno
 
-Crear archivo `.env`:
+Copiar el archivo de ejemplo y completar con valores reales:
+
+```bash
+# Copiar el template
+cp .env.example .env
+
+# Editar .env con tus credenciales
+nano .env  # o vim .env, o el editor que prefieras
+```
+
+Variables requeridas en `.env`:
 
 ```env
 ORACLE_APEX_BASE_URL=https://gsn.maxapex.net/apex/savio
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=tu_clave_supabase
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_KEY=tu_supabase_service_role_key
 ```
 
 **Solo 3 variables necesarias** (vs 10+ en sistema anterior)
+
+⚠️ **Importante:** Usar la clave `service_role` de Supabase, NO la `anon` key
 
 ### 3. Ejecutar Sincronización
 
@@ -340,8 +352,17 @@ Todos deben pasar ✅
 ```
 senv-db-sync/
 ├── sync_main.py                    # ✅ Script principal
+├── .env.example                    # ✅ Template de configuración
+├── .env                            # 🔒 Variables de entorno (git-ignored)
 ├── controllers/                    # ✅ 8 controllers autónomos
 │   ├── cotizaciones/
+│   │   ├── cotizaciones.controller.py
+│   │   ├── test_data.py           # 🧪 Test sin sincronizar
+│   │   ├── components/
+│   │   │   ├── get_data.py
+│   │   │   ├── transform_data.py
+│   │   │   └── synchronize.py
+│   │   └── README.md
 │   ├── clientes/
 │   ├── proyectos_cliente/
 │   ├── v_insumos/
@@ -353,7 +374,6 @@ senv-db-sync/
 │   ├── http_client.py
 │   ├── supabase_client.py
 │   └── dates.py
-├── old/                            # 📦 Sistema anterior (referencia)
 ├── .github/workflows/
 │   └── sync-erp-data.yml          # ✅ GitHub Actions
 ├── requirements.txt
@@ -383,15 +403,14 @@ senv-db-sync/
 ## ⚡ Quick Start
 
 ```bash
-# 1. Instalar
+# 1. Instalar dependencias
 pip install -r requirements.txt
 
-# 2. Configurar .env
-echo "ORACLE_APEX_BASE_URL=https://..." > .env
-echo "SUPABASE_URL=https://..." >> .env
-echo "SUPABASE_KEY=..." >> .env
+# 2. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales reales
 
-# 3. Ejecutar
+# 3. Ejecutar sincronización
 python sync_main.py
 ```
 
