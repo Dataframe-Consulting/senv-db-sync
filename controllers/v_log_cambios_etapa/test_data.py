@@ -104,12 +104,13 @@ def test_data_extraction(
                 if verbose:
                     print(f"   ⚡ Sincronización incremental desde última modificación: {fecha_desde_calc}")
             else:
-                # Primera sincronización: últimos N días
+                # Primera sincronización: últimos 90 días
                 from datetime import timedelta
-                fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+                fecha_desde_obj = datetime.now() - timedelta(days=90)
                 fecha_desde_calc = fecha_desde_obj.strftime('%Y-%m-%d')
                 if verbose:
-                    print(f"   🆕 Primera sincronización: últimos {dias_historico} días (desde {fecha_desde_calc})")
+                    print(f"   🆕 Primera sincronización: últimos 90 días (desde {fecha_desde_calc})")
+                    print(f"   ℹ️  Para cambios más antiguos, ejecutar con fecha_desde manual")
         
         # Determinar fecha_hasta
         fecha_hasta_calc = fecha_hasta

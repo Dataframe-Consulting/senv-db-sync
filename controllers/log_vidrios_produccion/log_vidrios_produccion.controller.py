@@ -69,11 +69,15 @@ def sync(
             print("🔄 CONTROLLER: Log Vidrios Producción (Sincronización Inteligente)")
             print("="*70)
         
-        # PASO 1: Información previa y determinar rango de fechas
+        # PASO 1: Información previa
         if verbose:
-            print("\n📊 Paso 1/5: Obteniendo información actual...")
+            print("\n📊 Paso 1/6: Obteniendo información actual...")
         
         sync_info = synchronize.get_last_sync_info(verbose=verbose)
+        
+        # PASO 2: Determinar rango de fechas
+        if verbose:
+            print("\n📅 Paso 2/6: Determinando rango de fechas...")
         
         # Determinar fecha_hasta
         if not fecha_hasta:
@@ -85,25 +89,29 @@ def sync(
                 # Sincronización incremental: usar última fecha de Supabase
                 last_modified = sync_info.get('last_modified')
                 if last_modified:
-                    # Usar la última fecha de modificación
-                    if isinstance(last_modified, str):
-                        fecha_desde = last_modified.split()[0]  # Tomar solo la parte de fecha
+                    # Convertir a formato YYYY-MM-DD (maneja múltiples formatos)
+                    if 'T' in last_modified:
+                        fecha_desde = last_modified.split('T')[0]
+                    elif ' ' in last_modified:
+                        fecha_desde = last_modified.split(' ')[0]
                     else:
-                        fecha_desde = last_modified.strftime('%Y-%m-%d')
+                        fecha_desde = last_modified
+                    
                     result['sync_type'] = 'incremental'
                     if verbose:
-                        print(f"📅 Sincronización INCREMENTAL desde: {fecha_desde}")
+                        print(f"   ⚡ Sincronización INCREMENTAL desde última modificación: {fecha_desde}")
                 else:
-                    # Primera sincronización: usar últimos N días
-                    fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
-                    fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
-                    result['sync_type'] = 'initial'
+                    # Primera sincronización: TODOS los registros históricos (sin filtro)
+                    fecha_desde = None
+                    fecha_hasta = None
+                    result['sync_type'] = 'initial_full'
                     if verbose:
-                        print(f"📅 Primera sincronización: últimos {dias_historico} días desde {fecha_desde}")
+                        print(f"   🆕 Primera sincronización: TODOS los registros históricos (sin filtro)")
+                        print(f"   ⚠️  Esto puede tomar varios minutos...")
             else:
                 result['sync_type'] = 'custom_range'
                 if verbose:
-                    print(f"📅 Rango personalizado: {fecha_desde} a {fecha_hasta}")
+                    print(f"   📅 Rango personalizado: {fecha_desde} a {fecha_hasta}")
         else:
             # Sincronización completa (sin filtro de fecha)
             fecha_desde = None
@@ -116,9 +124,12 @@ def sync(
         result['fecha_desde'] = fecha_desde
         result['fecha_hasta'] = fecha_hasta
         
-        # PASO 2: Extraer datos
+        if verbose and fecha_desde and fecha_hasta:
+            print(f"   📅 Rango final: {fecha_desde} → {fecha_hasta}")
+        
+        # PASO 3: Extraer datos
         if verbose:
-            print(f"\n📥 Paso 2/5: Extrayendo datos del endpoint...")
+            print(f"\n📥 Paso 3/6: Extrayendo datos del endpoint...")
         
         records, success = get_data.fetch_all(
             fecha_desde=fecha_desde,
@@ -138,9 +149,9 @@ def sync(
             result['success'] = True
             return result
         
-        # PASO 3: Transformar
+        # PASO 4: Transformar
         if verbose:
-            print(f"\n🔄 Paso 3/5: Transformando {len(records):,} registros...")
+            print(f"\n🔄 Paso 4/6: Transformando {len(records):,} registros...")
         
         transformed = transform_data.transform_all(records)
         
@@ -148,9 +159,9 @@ def sync(
             result['error'] = "Error en transformación"
             return result
         
-        # PASO 4: Deduplicar
+        # PASO 5: Deduplicar
         if verbose:
-            print(f"\n✨ Paso 4/5: Deduplicando registros...")
+            print(f"\n✨ Paso 5/6: Deduplicando registros...")
         
         unique_records = transform_data.deduplicate_by_id(transformed)
         
@@ -160,9 +171,9 @@ def sync(
                 print(f"   Duplicados removidos: {duplicados:,}")
             print(f"   Registros únicos: {len(unique_records):,}")
         
-        # PASO 5: Sincronizar
+        # PASO 6: Sincronizar
         if verbose:
-            print(f"\n💾 Paso 5/5: Sincronizando a Supabase...")
+            print(f"\n💾 Paso 6/6: Sincronizando a Supabase...")
         
         synced_count = synchronize.sync_to_supabase(unique_records, verbose=verbose)
         

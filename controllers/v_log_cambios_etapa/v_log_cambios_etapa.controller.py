@@ -101,11 +101,16 @@ def sync(
                 if verbose:
                     print(f"   ⚡ Sincronización incremental desde última modificación: {fecha_desde}")
             else:
-                # Primera sincronización: usar últimos N días
-                fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+                # Primera sincronización: últimos 90 días
+                # Nota: Para v_log_cambios_etapa, 90 días es razonable porque:
+                # - Depende de log_vidrios_produccion (que sí carga todo en primera sync)
+                # - Los cambios de etapa de órdenes muy antiguas no son relevantes
+                # - Si se necesitan más, usar fecha_desde manual
+                fecha_desde_obj = datetime.now() - timedelta(days=90)
                 fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
                 if verbose:
-                    print(f"   🆕 Primera sincronización: últimos {dias_historico} días (desde {fecha_desde})")
+                    print(f"   🆕 Primera sincronización: últimos 90 días (desde {fecha_desde})")
+                    print(f"   ℹ️  Para cambios más antiguos, ejecutar con fecha_desde manual")
         
         # Determinar fecha_hasta
         if not fecha_hasta:
