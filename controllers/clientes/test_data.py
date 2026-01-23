@@ -12,6 +12,10 @@ from datetime import datetime
 root_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
+# Cargar variables de entorno
+from dotenv import load_dotenv
+load_dotenv()
+
 from controllers.clientes.components import get_data
 from controllers.clientes.components import transform_data
 from controllers.clientes.components import synchronize
