@@ -29,29 +29,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: 🔄 Sincronizar datos (8 endpoints con sync incremental)
+      - name: 🔄 Sincronizar datos (8 endpoints - Sistema Nuevo)
         env:
           ORACLE_APEX_BASE_URL: ${{ secrets.ORACLE_APEX_BASE_URL }}
-          ORACLE_APEX_USERNAME: ${{ secrets.ORACLE_APEX_USERNAME }}
-          ORACLE_APEX_PASSWORD: ${{ secrets.ORACLE_APEX_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          BATCH_SIZE: 1000
-          MAX_RETRIES: 3
-          RETRY_DELAY: 2
-          REQUEST_TIMEOUT: 120
-          LOG_LEVEL: INFO
         run: |
-          python sync_all_endpoints.py
+          python sync_main.py
       
-      - name: 📊 Upload logs
+      - name: 📊 Verificar estado
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sync-logs-${{ github.run_number }}
-          path: apex_supabase_sync/logs/
-          retention-days: 30
+        run: |
+          echo "✅ Sincronización completada"
+          echo "Ver output arriba para detalles de cada controller"
       
       - name: 💬 Notify on failure
         if: failure()

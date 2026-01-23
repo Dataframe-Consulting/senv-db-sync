@@ -1,0 +1,1 @@
+"""Components del controller."""

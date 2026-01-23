@@ -1,198 +1,398 @@
-# Sincronización ERP APEX → Supabase
+# 🔄 Sincronización ERP APEX → Supabase
 
-Sistema de sincronización automática de datos desde Oracle APEX (ERP SAVIO) hacia Supabase PostgreSQL, ejecutándose cada hora mediante GitHub Actions.
+Sistema de sincronización automática de datos desde **Oracle APEX (ERP SAVIO)** hacia **Supabase PostgreSQL**, ejecutándose cada 6 horas mediante GitHub Actions.
 
-## 📋 Problema que Resuelve
+**Versión:** 2.0 (Sistema Nuevo - Enero 2026)  
+**Estado:** ✅ Producción
 
-Mantiene actualizada una base de datos Supabase con datos del ERP SAVIO, extrayendo información de 4 endpoints y sincronizándola automáticamente **sin duplicados**.
+---
+
+## 📋 Descripción
+
+Mantiene actualizada una base de datos Supabase con datos del ERP SAVIO, sincronizando **8 endpoints** de forma automática, idempotente y escalable.
+
+---
 
 ## 🏗️ Arquitectura
 
 ```
 ┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
 │  Oracle APEX    │─────▶│  GitHub Actions  │─────▶│   Supabase      │
-│  (ERP SAVIO)    │      │  (cada 60 min)   │      │   PostgreSQL    │
+│  (ERP SAVIO)    │      │  (cada 6 horas)  │      │   PostgreSQL    │
 └─────────────────┘      └──────────────────┘      └─────────────────┘
 ```
 
-### Componentes
+### Sistema Basado en **Controllers Autónomos**
 
-- **Oracle APEX Client**: Extrae datos de los endpoints REST
-- **Supabase Client**: Inserta datos con UPSERT para evitar duplicados
-- **Sync Service**: Orquesta la sincronización de los 4 endpoints
-- **Transformations**: Adapta los datos al formato requerido
+```
+sync_main.py
+    ↓
+controllers/ (8 endpoints)
+├── cotizaciones/
+│   ├── README.md                    # Documentación del endpoint
+│   ├── cotizaciones.controller.py   # Orquestador
+│   └── components/
+│       ├── get_data.py              # URL + paginación
+│       ├── transform_data.py        # Transformación completa
+│       └── synchronize.py           # UPSERT a Supabase
+├── clientes/
+├── proyectos_cliente/
+├── v_insumos/
+├── detalle_cotizacion/
+├── vidrios_produccion/
+├── log_vidrios_produccion/
+└── v_log_cambios_etapa/
+```
 
-## 📊 Endpoints Sincronizados
+---
 
-| # | Endpoint | Tabla Supabase | Descripción | Script |
-|---|----------|----------------|-------------|--------|
-| 1 | `v_log_cambios_etapa` | `log_cambios_etapa` | Cambios de etapa en producción | `sync_endpoint_1.py` |
-| 2 | `detalle_cotizacion` | `detalle_cotizacion` | Detalles de cotizaciones | `sync_endpoint_2.py` |
-| 3 | `vidrios_produccion` | `vidrios_produccion` | Vidrios en producción | `sync_endpoint_3.py` |
-| 4 | `log_vidrios_produccion` | `log_vidrios_produccion` | Log de vidrios producidos | `sync_endpoint_4.py` |
-| 5 | `cotizaciones` | `cotizaciones` | Cotizaciones generales | `sync_endpoint_5.py` |
-| 6 | `clientes` | `clientes` | Catálogo de clientes | `sync_endpoint_6.py` |
-| 7 | `proyectos_cliente` | `proyectos_cliente` | Proyectos por cliente | `sync_endpoint_7.py` |
-| 8 | `v_insumos` | `v_insumos` | Catálogo de insumos | `sync_endpoint_8.py` |
+## 📊 Endpoints Sincronizados (8 total)
+
+| # | Endpoint | Tabla Supabase | Registros | Páginas | Duración | Tipo |
+|---|----------|----------------|-----------|---------|----------|------|
+| 1 | `clientes` | `clientes` | 36 | 1 | <1s | Simple ✅ |
+| 2 | `proyectos_cliente` | `proyectos_cliente` | 231 | 1 | <1s | Simple ✅ |
+| 3 | `v_insumos` | `v_insumos` | 249 | 1 | <1s | Simple ✅ |
+| 4 | `cotizaciones` | `cotizaciones` | 2,166 | 3 | ~3s | Simple ✅ |
+| 5 | `detalle_cotizacion` | `detalle_cotizacion` | 17,798 | 18 | ~12s | Medio ⚠️ |
+| 6 | `vidrios_produccion` | `vidrios_produccion` | 97,826 | 98 | ~80s | Grande ⚠️ |
+| 7 | `log_vidrios_produccion` | `log_vidrios_produccion` | 15,498* | 16 | ~5s | Incremental ⭐ |
+| 8 | `v_log_cambios_etapa` | `log_cambios_etapa` | Variable** | - | Variable | Especial 🔧 |
+
+**Notas:**
+- *log_vidrios_produccion: 15,498 con filtro de 23 días | 265,000+ sin filtro (usa incremental por defecto)
+- **v_log_cambios_etapa: Consulta por orden de producción (2,093 órdenes) - DESHABILITADO por defecto
+
+**Total típico por sincronización:** ~133,000 registros en ~2-3 minutos
+
+---
 
 ## 🚀 Características
 
-- ✅ **Sincronización automática cada hora** mediante GitHub Actions
-- ✅ **Prevención de duplicados** usando UPSERT con PRIMARY KEY
-- ✅ **Procesamiento por lotes** para eficiencia
-- ✅ **Manejo de errores** con reintentos automáticos
-- ✅ **Logs detallados** de cada sincronización
-- ✅ **Solo datos nuevos** se agregan a Supabase
+- ✅ **Sincronización automática** cada 6 horas (GitHub Actions)
+- ✅ **Paginación automática** - Maneja endpoints con +100K registros
+- ✅ **Sin validaciones** - Sistema permisivo (si falta dato → NULL)
+- ✅ **UPSERT idempotente** - Sin duplicados
+- ✅ **Controllers autónomos** - Cada endpoint independiente
+- ✅ **Sin CLI** - Script directo y simple
+- ✅ **Escalable** - Agregar endpoint = crear carpeta
+- ✅ **Documentado** - README por controller
+
+---
 
 ## 🔄 Flujo de Sincronización
 
-1. **Extracción**: Obtiene datos de Oracle APEX por lotes
-2. **Transformación**: Adapta el formato y genera IDs únicos
-3. **Validación**: Verifica que no existan duplicados
-4. **Inserción**: Usa UPSERT en Supabase (`INSERT ... ON CONFLICT DO UPDATE`)
-5. **Reporte**: Genera logs con estadísticas
+Cada controller ejecuta **4 pasos:**
+
+```
+1. 📊 Información previa
+   └─ Consulta últimos datos en Supabase
+
+2. 📥 Extraer datos
+   └─ Obtiene TODOS los registros (paginación automática)
+
+3. 🔄 Transformar
+   └─ Convierte al formato de Supabase (campos → NULL si faltan)
+
+4. 💾 Sincronizar
+   └─ UPSERT en batches de 1000 registros
+```
+
+---
 
 ## 🚀 Ejecución Local
 
-### 1. Configurar entorno
+### 1. Configurar Entorno
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/Dataframe-Consulting/senv-apex-db-sync.git
-cd senv-apex-db-sync
+git clone https://github.com/tu-org/senv-db-sync.git
+cd senv-db-sync
 
 # Crear entorno virtual
 python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Instalar dependencias
 pip install -r requirements.txt
 ```
 
-### 2. Configurar variables de entorno
+### 2. Configurar Variables de Entorno
 
 Crear archivo `.env`:
 
 ```env
-ORACLE_APEX_USERNAME=tu_usuario
-ORACLE_APEX_PASSWORD=tu_contraseña
+ORACLE_APEX_BASE_URL=https://gsn.maxapex.net/apex/savio
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=tu_clave_supabase
 ```
 
-### 3. Ejecutar sincronización
+**Solo 3 variables necesarias** (vs 10+ en sistema anterior)
+
+### 3. Ejecutar Sincronización
 
 ```bash
-# Sincronizar todos los endpoints (los 4 a la vez)
-python sync_all_endpoints.py
+# Sincronizar los 8 endpoints
+python sync_main.py
 ```
 
-## ⚙️ GitHub Actions (Automático cada hora)
+**Output esperado:**
+```
+======================================================================
+🔄 CONTROLLER: Cotizaciones
+======================================================================
 
-### Paso 1: Crear las tablas en Supabase
+📊 Paso 1/4: Información actual...
+   Registros en Supabase: 4,521
+   Última actualización: 2026-01-23 08:30:15
 
-Antes de ejecutar el workflow, crea las tablas en Supabase:
+📥 Paso 2/4: Extrayendo datos del endpoint...
+   📥 Consultando: https://gsn.maxapex.net/apex/savio/cotizaciones
+   (con paginación automática)
+   ✅ Total obtenidos: 4,850 registros
 
-1. Ve al editor SQL de Supabase
-2. Ejecuta el script `scripts/create_all_tables.sql`
-3. Verifica que las 4 tablas se crearon correctamente
+🔄 Paso 3/4: Transformando 4,850 registros...
+   ✅ Transformados: 4,850 registros
 
-### Paso 2: Configurar Environment en GitHub
+💾 Paso 4/4: Sincronizando a Supabase...
+   ✅ Sincronizados: 4,850 registros
 
-1. Ve a: `Settings → Environments → New environment`
-2. Nombre: `production` (o el que prefieras)
-3. Haz clic en "Configure environment"
+======================================================================
+✅ COMPLETADO
+   📥 Extraídos: 4,850
+   💾 Sincronizados: 4,850
+   ⏱️  Duración: 12.3s
+======================================================================
 
-### Paso 3: Agregar Secrets al Environment
+... (repite para los otros 7 controllers)
+```
 
-En la sección "Environment secrets", agrega los siguientes secrets:
+---
 
-| Secret | Descripción | Ejemplo |
-|--------|-------------|---------|
-| `ORACLE_APEX_BASE_URL` | URL base del Oracle APEX | `https://gsn.maxapex.net/ords/savio` |
-| `ORACLE_APEX_USERNAME` | Usuario de Oracle APEX | Tu usuario |
-| `ORACLE_APEX_PASSWORD` | Contraseña de Oracle APEX | Tu contraseña |
-| `SUPABASE_URL` | URL de tu proyecto Supabase | `https://xxx.supabase.co` |
-| `SUPABASE_KEY` | API Key de Supabase | Tu clave anon/service_role |
-| `SUPABASE_DB_PASSWORD` | Contraseña DB Supabase | Tu contraseña de DB |
+## ⚙️ GitHub Actions (Automático cada 6 horas)
 
-### Paso 4: Ejecutar el Workflow
+### Configuración
 
-El workflow `.github/workflows/sync-erp-data.yml` se ejecuta:
-- **Automáticamente**: Cada 60 minutos (cron: `0 * * * *`)
-- **Manualmente**: Desde la pestaña "Actions" en GitHub
+**Workflow:** `.github/workflows/sync-erp-data.yml`
 
-Los **4 endpoints se sincronizan en una sola ejecución** para mantener la consistencia.
+**Horario:** Cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
 
-## 🔒 Prevención de Duplicados
+### Paso 1: Configurar Secrets
 
-El sistema usa **UPSERT** con la columna `id` como PRIMARY KEY:
+En GitHub: `Settings → Secrets and variables → Actions`
+
+| Secret | Valor | Ejemplo |
+|--------|-------|---------|
+| `ORACLE_APEX_BASE_URL` | URL de Oracle APEX | `https://gsn.maxapex.net/apex/savio` |
+| `SUPABASE_URL` | URL de Supabase | `https://xxx.supabase.co` |
+| `SUPABASE_KEY` | API Key de Supabase | `eyJhbGci...` |
+
+### Paso 2: Ejecutar
+
+El workflow se ejecuta:
+- **Automáticamente:** Cada 6 horas
+- **Manualmente:** `Actions → Sincronización ERP → Run workflow`
+
+---
+
+## 🔒 Sistema de UPSERT (Sin Duplicados)
+
+Cada registro tiene un `id` único usado como PRIMARY KEY:
 
 ```python
-supabase_client.batch_upsert(
-    transformed_data,
-    conflict_column='id'
-)
+# Ejemplo: Cotizaciones
+id = str(no_cotizacion)  # "24060001"
+
+# Ejemplo: Proyectos Cliente
+id = f"{no_cliente}_{no_proyecto}"  # "123_456"
+
+# UPSERT automático
+INSERT INTO cotizaciones (...) VALUES (...)
+ON CONFLICT (id) DO UPDATE SET ...
 ```
 
-Esto garantiza que:
-- Si el registro existe (mismo `id`), se actualiza
-- Si no existe, se inserta nuevo
-- **No se crean duplicados**
+**Resultado:**
+- ✅ Si existe → Actualiza
+- ✅ Si no existe → Inserta
+- ❌ **No crea duplicados**
+
+---
 
 ## 📈 Rendimiento
 
-- **Velocidad promedio**: 50-350 registros/segundo
-- **Batch size**: 100 registros por lote
-- **Tiempo estimado**: 2-3 horas para sincronización completa inicial
+| Métrica | Valor |
+|---------|-------|
+| **Registros totales** | ~133,000 (sin v_log_cambios_etapa) |
+| **Tiempo total** | ~2-3 minutos (sincronización incremental) |
+| **Velocidad promedio** | ~740 registros/segundo |
+| **Batch size** | 1,000 registros |
+| **Timeout por request** | 60 segundos |
+| **Endpoint más grande** | vidrios_produccion: 97,826 registros |
+| **Sincronización incremental** | log_vidrios_produccion: reduce de 265K a ~15K |
 
-## 🆕 Nuevos Endpoints (Diciembre 2025)
+---
 
-Se agregaron **4 nuevos endpoints** al sistema de sincronización:
+## 📚 Documentación
 
-### Cotizaciones (`cotizaciones`)
-- 19 campos + metadatos
-- ID único: `no_cotizacion`
-- Incluye: fechas, clientes, proyectos, status, moneda
+### Documentación Principal
 
-### Clientes (`clientes`)
-- 22 campos + metadatos
-- ID único: `no_cliente`
-- Incluye: RFC, razón social, régimen fiscal, contactos
+| Documento | Descripción |
+|-----------|-------------|
+| `README_NUEVO_SISTEMA.md` | 📖 Guía completa del usuario |
+| `ARQUITECTURA.md` | 🏗️ Documentación técnica detallada |
+| `MIGRACION_COMPLETADA.md` | 📦 Proceso de migración desde sistema anterior |
 
-### Proyectos Cliente (`proyectos_cliente`)
-- 12 campos + metadatos
-- ID compuesto: `{no_cliente}_{no_proyecto}`
-- Incluye: nombres, anticipos, Skyplanner ID
+### Documentación Técnica
 
-### Vista Insumos (`v_insumos`)
-- 24 campos + metadatos
-- ID único: `no_insumo`
-- Incluye: claves, descripciones, precios (MXN/USD/EUR), tiempos
+| Documento | Descripción |
+|-----------|-------------|
+| `VALIDACION_FINAL.md` | ✅ Validaciones de paginación y transformaciones |
+| `SIN_VALIDACIONES.md` | 🔓 Por qué el sistema es permisivo |
+| `PAGINACION_ORACLE_APEX.md` | 📄 Cómo funciona la paginación |
+| `SCRIPT_SIMPLE.md` | 💡 Por qué el script es tan simple |
 
-### 📚 Documentación Detallada
+### Por Controller
 
-Para más información sobre los nuevos endpoints:
-- **Guía de configuración**: `docs/NUEVOS_ENDPOINTS.md`
-- **Resumen técnico**: `docs/RESUMEN_IMPLEMENTACION.md`
-- **Inicio rápido**: `docs/INICIO_RAPIDO.md`
+Cada controller tiene su `README.md` en `controllers/{nombre}/README.md`:
+- URL del endpoint
+- Campos sincronizados
+- Primary key
+- Limitaciones (ej: no soporta filtros por fecha)
+- Estrategia de sincronización
 
-### ⚠️ Importante
+---
 
-Para activar los nuevos endpoints, **debes ejecutar primero** el script SQL:
-```bash
-scripts/create_new_tables.sql
-```
+## 🆕 Cambios vs Sistema Anterior
+
+| Aspecto | Antes | Ahora |
+|---------|-------|-------|
+| **Script** | `sync_all_endpoints.py` (337 líneas) | `sync_main.py` (100 líneas) |
+| **Arquitectura** | Monolítico + JSON | Controllers autónomos |
+| **Paginación** | ❌ No (solo 1,000 registros) | ✅ Automática (todos los registros) |
+| **Validaciones** | ✅ Rechazaba incompletos | ❌ Permisivo (NULL si falta) |
+| **Variables env** | 10+ | 3 |
+| **CLI** | Con argparse | Sin CLI |
+| **Transformaciones** | Archivo central | Una por controller |
+| **Escalabilidad** | Baja | Alta |
+
+**Ver:** `MIGRACION_COMPLETADA.md` para detalles completos
+
+---
 
 ## 🛠️ Tecnologías
 
-- **Python 3.11**
+- **Python 3.11+**
 - **Supabase** (PostgreSQL)
-- **Oracle APEX REST**
+- **Oracle APEX REST API**
 - **GitHub Actions**
-- **Librerías**: `supabase-py`, `requests`, `python-dotenv`
+- **Librerías:** `supabase-py`, `requests`, `python-dotenv`
+
+---
+
+## 🧪 Tests
+
+### Tests de Validación de Datos (Sin Sincronizar)
+
+Cada controller tiene un script `test_data.py` que extrae y transforma datos sin sincronizar a Supabase:
+
+```bash
+# Activar entorno virtual
+source .venv/bin/activate
+
+# Test de controllers individuales
+python controllers/clientes/test_data.py
+python controllers/cotizaciones/test_data.py
+python controllers/detalle_cotizacion/test_data.py
+python controllers/proyectos_cliente/test_data.py
+python controllers/v_insumos/test_data.py
+python controllers/vidrios_produccion/test_data.py
+
+# Test con filtro de fecha (log_vidrios_produccion)
+python controllers/log_vidrios_produccion/test_data.py 2026-01-01 2026-01-23
+
+# Test limitado (v_log_cambios_etapa)
+python controllers/v_log_cambios_etapa/test_data.py 10  # Solo 10 órdenes
+```
+
+Cada test:
+- ✅ Extrae datos del endpoint Oracle APEX
+- ✅ Transforma al formato Supabase
+- ✅ Muestra estadísticas y muestra de datos
+- ✅ Guarda resultado en JSON
+- ❌ NO sincroniza a Supabase
+
+### Tests de Arquitectura
+
+```bash
+# Verificar estructura
+python test_arquitectura.py
+
+# Verificar imports
+python test_imports_manuales.py
+```
+
+Todos deben pasar ✅
+
+---
+
+## 📁 Estructura del Proyecto
+
+```
+senv-db-sync/
+├── sync_main.py                    # ✅ Script principal
+├── controllers/                    # ✅ 8 controllers autónomos
+│   ├── cotizaciones/
+│   ├── clientes/
+│   ├── proyectos_cliente/
+│   ├── v_insumos/
+│   ├── detalle_cotizacion/
+│   ├── vidrios_produccion/
+│   ├── log_vidrios_produccion/
+│   └── v_log_cambios_etapa/
+├── utils/                          # ✅ Utilidades compartidas
+│   ├── http_client.py
+│   ├── supabase_client.py
+│   └── dates.py
+├── old/                            # 📦 Sistema anterior (referencia)
+├── .github/workflows/
+│   └── sync-erp-data.yml          # ✅ GitHub Actions
+├── requirements.txt
+└── README.md                       # ← Este archivo
+```
+
+---
 
 ## 📞 Soporte
 
-**Dataframe Consulting**  
-Última actualización: 10 de diciembre de 2025
+**Dataframe Consulting**
+
+**Última actualización:** 23 de enero de 2026  
+**Versión:** 2.0 (Sistema Nuevo - Controllers Autónomos)
+
+---
+
+## 🔗 Enlaces Útiles
+
+- [Guía completa del usuario](README_NUEVO_SISTEMA.md)
+- [Documentación técnica](ARQUITECTURA.md)
+- [Proceso de migración](MIGRACION_COMPLETADA.md)
+- [Validación del sistema](VALIDACION_FINAL.md)
+
+---
+
+## ⚡ Quick Start
+
+```bash
+# 1. Instalar
+pip install -r requirements.txt
+
+# 2. Configurar .env
+echo "ORACLE_APEX_BASE_URL=https://..." > .env
+echo "SUPABASE_URL=https://..." >> .env
+echo "SUPABASE_KEY=..." >> .env
+
+# 3. Ejecutar
+python sync_main.py
+```
+
+✅ ¡Listo!
