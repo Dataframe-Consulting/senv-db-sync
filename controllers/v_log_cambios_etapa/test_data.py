@@ -12,23 +12,38 @@ from datetime import datetime
 root_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
+# Cargar variables de entorno
+from dotenv import load_dotenv
+load_dotenv()
+
 from controllers.v_log_cambios_etapa.components import get_data
 from controllers.v_log_cambios_etapa.components import transform_data
 from controllers.v_log_cambios_etapa.components import synchronize
 
 
 def test_data_extraction(
+    fecha_desde: str = None,
+    fecha_hasta: str = None,
+    dias_historico: int = 30,
+    full_sync: bool = False,
     verbose: bool = True,
-    show_sample: int = 3,
-    max_ordenes: int = None
+    show_sample: int = 3
 ):
     """
     Prueba la extracción y transformación de datos sin sincronizar.
     
+    Estrategia:
+    - Si full_sync=True: usa últimos N días (dias_historico)
+    - Si fecha_desde: usa fecha manual
+    - Si no: usa fecha incremental desde Supabase
+    
     Args:
+        fecha_desde: Fecha inicial (YYYY-MM-DD) - opcional
+        fecha_hasta: Fecha final (YYYY-MM-DD) - opcional
+        dias_historico: Días hacia atrás si full_sync o primera sync (default: 30)
+        full_sync: Si True, ignora fecha en Supabase y usa dias_historico
         verbose: Si mostrar logs de progreso
         show_sample: Número de registros de ejemplo a mostrar
-        max_ordenes: Máximo número de órdenes a consultar (None = todas)
         
     Returns:
         Dict con los datos transformados y estadísticas
@@ -54,29 +69,65 @@ def test_data_extraction(
         
         # PASO 1: Información previa
         if verbose:
-            print("\n📊 Paso 1/3: Información actual de Supabase...")
-        synchronize.get_last_sync_info(verbose=verbose)
+            print("\n📊 Paso 1/4: Información actual de Supabase...")
+        sync_info = synchronize.get_last_sync_info(verbose=verbose)
         
-        # PASO 2: Extraer datos
+        # PASO 2: Determinar rango de fechas
         if verbose:
-            print("\n📥 Paso 2/3: Extrayendo datos del endpoint...")
-            if max_ordenes:
-                print(f"   ⚠️  Limitado a las primeras {max_ordenes} órdenes (modo prueba)")
+            print("\n📅 Paso 2/4: Determinando rango de fechas...")
         
-        # Obtener órdenes y limitar si es necesario
-        if max_ordenes:
-            from controllers.v_log_cambios_etapa.components.get_data import get_ordenes_produccion_unicas
-            ordenes, success_ordenes = get_ordenes_produccion_unicas(verbose=verbose)
-            if success_ordenes and ordenes:
-                ordenes_limitadas = ordenes[:max_ordenes]
-                records, success = get_data.fetch_all(
-                    ordenes_especificas=ordenes_limitadas,
-                    verbose=verbose
-                )
-            else:
-                records, success = [], False
+        # Determinar fecha_desde
+        fecha_desde_calc = fecha_desde
+        if fecha_desde_calc:
+            # Usuario especificó fecha manualmente
+            if verbose:
+                print(f"   📅 Usando fecha manual: {fecha_desde_calc}")
+        elif full_sync:
+            # Full sync: últimos N días
+            from datetime import timedelta
+            fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+            fecha_desde_calc = fecha_desde_obj.strftime('%Y-%m-%d')
+            if verbose:
+                print(f"   🔄 Full sync: últimos {dias_historico} días (desde {fecha_desde_calc})")
         else:
-            records, success = get_data.fetch_all(verbose=verbose)
+            # Sincronización incremental: desde última fecha en Supabase
+            last_modified = sync_info.get('last_modified')
+            if last_modified:
+                # Usar fecha de última modificación en Supabase
+                if 'T' in last_modified:
+                    fecha_desde_calc = last_modified.split('T')[0]
+                elif ' ' in last_modified:
+                    fecha_desde_calc = last_modified.split(' ')[0]
+                else:
+                    fecha_desde_calc = last_modified
+                
+                if verbose:
+                    print(f"   ⚡ Sincronización incremental desde última modificación: {fecha_desde_calc}")
+            else:
+                # Primera sincronización: últimos N días
+                from datetime import timedelta
+                fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+                fecha_desde_calc = fecha_desde_obj.strftime('%Y-%m-%d')
+                if verbose:
+                    print(f"   🆕 Primera sincronización: últimos {dias_historico} días (desde {fecha_desde_calc})")
+        
+        # Determinar fecha_hasta
+        fecha_hasta_calc = fecha_hasta
+        if not fecha_hasta_calc:
+            fecha_hasta_calc = datetime.now().strftime('%Y-%m-%d')
+        
+        if verbose:
+            print(f"   📅 Rango final: {fecha_desde_calc} → {fecha_hasta_calc}")
+        
+        # PASO 3: Extraer datos
+        if verbose:
+            print("\n📥 Paso 3/4: Extrayendo datos del endpoint...")
+        
+        records, success = get_data.fetch_all(
+            fecha_desde=fecha_desde_calc,
+            fecha_hasta=fecha_hasta_calc,
+            verbose=verbose
+        )
         
         if not success:
             result['error'] = "Error al extraer datos del endpoint"
@@ -90,9 +141,9 @@ def test_data_extraction(
             result['success'] = True
             return result
         
-        # PASO 3: Transformar
+        # PASO 4: Transformar
         if verbose:
-            print(f"\n🔄 Paso 3/3: Transformando {len(records):,} registros...")
+            print(f"\n🔄 Paso 4/4: Transformando {len(records):,} registros...")
         
         transformed = transform_data.transform_all(records)
         
@@ -148,26 +199,58 @@ def test_data_extraction(
 if __name__ == "__main__":
     import sys
     
-    # Permitir limitar número de órdenes desde línea de comandos
-    max_ordenes = None
+    # Parsear argumentos de línea de comandos
+    fecha_desde = None
+    fecha_hasta = None
+    dias_historico = 30
+    full_sync = False
+    
     if len(sys.argv) > 1:
-        try:
-            max_ordenes = int(sys.argv[1])
-        except ValueError:
-            if sys.argv[1] in ['-h', '--help']:
-                print("\nUso:")
-                print("  python test_data.py           # Todas las órdenes")
-                print("  python test_data.py 10        # Solo primeras 10 órdenes (prueba rápida)")
-                print("  python test_data.py 100       # Primeras 100 órdenes")
-                sys.exit(0)
+        if sys.argv[1] in ['-h', '--help']:
+            print("\n🧪 Test de V Log Cambios Etapa (SIN SINCRONIZAR)")
+            print("="*70)
+            print("\nUso:")
+            print("  python test_data.py                      # Incremental (desde última sync)")
+            print("  python test_data.py --full              # Full sync (últimos 30 días)")
+            print("  python test_data.py 2026-01-01          # Desde fecha específica hasta hoy")
+            print("  python test_data.py 2026-01-01 2026-01-23  # Rango específico")
+            print("\nModos:")
+            print("  INCREMENTAL (default): Consulta Supabase y sincroniza desde última fecha")
+            print("  FULL (--full): Ignora Supabase y sincroniza últimos 30 días completos")
+            print("  MANUAL (con fechas): Usa las fechas que especifiques")
+            print("\nEjemplos:")
+            print("  python test_data.py                      # Incremental desde última sync")
+            print("  python test_data.py --full              # Últimos 30 días completos")
+            print("  python test_data.py 2026-01-01          # Desde 1 enero hasta hoy")
+            print("  python test_data.py 2026-01-01 2026-01-15  # Del 1 al 15 enero")
+            print("="*70)
+            sys.exit(0)
+        
+        # Verificar si es full sync
+        if sys.argv[1] == '--full':
+            full_sync = True
+        else:
+            # Primer argumento: fecha_desde
+            fecha_desde = sys.argv[1]
+            
+            # Segundo argumento: fecha_hasta (opcional)
+            if len(sys.argv) > 2:
+                fecha_hasta = sys.argv[2]
     
     # Ejecutar test
-    result = test_data_extraction(verbose=True, show_sample=3, max_ordenes=max_ordenes)
+    result = test_data_extraction(
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        dias_historico=dias_historico,
+        full_sync=full_sync,
+        verbose=True,
+        show_sample=3
+    )
     
     # Guardar resultado completo en archivo JSON
     if result['success']:
-        suffix = f"_{max_ordenes}ordenes" if max_ordenes else "_todas"
-        output_file = f"test_v_log_cambios_etapa_{datetime.now().strftime('%Y%m%d_%H%M%S')}{suffix}.json"
+        fecha_str = f"{fecha_desde or 'ultimos30d'}_{fecha_hasta or 'hoy'}"
+        output_file = f"test_v_log_cambios_etapa_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{fecha_str}.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False, default=str)
         print(f"\n💾 Resultado completo guardado en: {output_file}")

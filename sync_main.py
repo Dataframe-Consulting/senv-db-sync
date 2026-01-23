@@ -93,11 +93,12 @@ def main():
         # Solo sincroniza cambios desde la última ejecución (mucho más rápido)
         results.append(log_vidrios_produccion.run())  # Incremental: ~15K registros, ~5s
         
-        # ⚠️ ADVERTENCIA: v_log_cambios_etapa puede ser MUY lento
-        # Consulta cada orden de producción individualmente (~2093 órdenes)
-        # Considerar ejecutar por separado o con filtrado
-        # results.append(v_log_cambios_etapa.run())  # DESHABILITADO por defecto
-        print("\n⚠️  v_log_cambios_etapa DESHABILITADO (ejecutar manualmente si es necesario)")
+        # ========== CONTROLLERS DE LOGS (Incremental Real) ==========
+        # v_log_cambios_etapa usa sincronización incremental:
+        # 1. Consulta Supabase para obtener última fecha de modificación
+        # 2. Obtiene órdenes de log_vidrios_produccion desde esa fecha
+        # 3. Solo consulta cambios nuevos (muy eficiente)
+        results.append(v_log_cambios_etapa.run())  # Incremental desde última sync
         
         # =================================================================
         # FIN DE EJECUCIÓN DE CONTROLLERS

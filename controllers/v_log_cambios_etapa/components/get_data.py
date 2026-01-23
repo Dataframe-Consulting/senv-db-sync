@@ -1,13 +1,14 @@
 """Component: Obtención de datos para v_log_cambios_etapa.
 
 Este endpoint requiere consultas por orden de producción individual.
-Primero obtiene las órdenes de vidrios_produccion, luego consulta cambios_etapa para cada una.
+Primero obtiene las órdenes de log_vidrios_produccion (con filtro de fecha),
+luego consulta cambios_etapa para cada una.
 """
 
 import os
 from typing import List, Dict, Any, Tuple, Optional
 from utils.http_client import http_get_all_pages, extract_items_from_response, http_get
-from controllers.vidrios_produccion.components import get_data as vidrios_get_data
+from controllers.log_vidrios_produccion.components import get_data as log_vidrios_get_data
 
 BASE_URL = os.getenv('ORACLE_APEX_BASE_URL', 'https://gsn.maxapex.net/apex/savio')
 ENDPOINT_PATH = 'periodo/cambios_etapa'
@@ -18,40 +19,56 @@ def get_endpoint_url(no_orden_produccion: int) -> str:
     return f"{BASE_URL}/{ENDPOINT_PATH}/{no_orden_produccion}"
 
 
-def get_ordenes_produccion_unicas(verbose: bool = True) -> Tuple[List[int], bool]:
+def get_ordenes_produccion_unicas(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    verbose: bool = True
+) -> Tuple[List[int], bool]:
     """
-    Obtiene las órdenes de producción únicas de vidrios_produccion.
+    Obtiene las órdenes de producción únicas de log_vidrios_produccion.
+    
+    Args:
+        fecha_desde: Fecha inicial (YYYY-MM-DD) - opcional
+        fecha_hasta: Fecha final (YYYY-MM-DD) - opcional
+        verbose: Si mostrar logs
     
     Returns:
         Tupla (lista de órdenes únicas, éxito)
     """
     if verbose:
-        print("📋 Paso 1: Obteniendo órdenes de producción de vidrios_produccion...")
+        if fecha_desde and fecha_hasta:
+            print(f"📋 Paso 1: Obteniendo órdenes de log_vidrios_produccion ({fecha_desde} a {fecha_hasta})...")
+        else:
+            print("📋 Paso 1: Obteniendo órdenes de log_vidrios_produccion (sin filtro)...")
     
-    # Obtener todos los vidrios de producción
-    vidrios, success = vidrios_get_data.fetch_all(verbose=False)
+    # Obtener logs de vidrios de producción (con filtro de fecha)
+    logs, success = log_vidrios_get_data.fetch_all(
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        verbose=False
+    )
     
     if not success:
         if verbose:
-            print("❌ Error al obtener vidrios de producción")
+            print("❌ Error al obtener log_vidrios_produccion")
         return [], False
     
-    if not vidrios:
+    if not logs:
         if verbose:
-            print("⚠️  No hay vidrios de producción")
+            print("⚠️  No hay registros en log_vidrios_produccion")
         return [], True
     
     # Extraer órdenes únicas
     ordenes_set = set()
-    for vidrio in vidrios:
-        no_orden = vidrio.get('no_orden_produccion') or vidrio.get('NO_ORDEN_PRODUCCION')
+    for log in logs:
+        no_orden = log.get('no_orden_produccion') or log.get('NO_ORDEN_PRODUCCION')
         if no_orden:
             ordenes_set.add(int(no_orden))
     
     ordenes_unicas = sorted(list(ordenes_set))
     
     if verbose:
-        print(f"   ✅ {len(vidrios):,} vidrios → {len(ordenes_unicas):,} órdenes únicas")
+        print(f"   ✅ {len(logs):,} logs → {len(ordenes_unicas):,} órdenes únicas")
     
     return ordenes_unicas, True
 
@@ -86,14 +103,18 @@ def fetch_cambios_for_orden(
 
 
 def fetch_all(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
     ordenes_especificas: Optional[List[int]] = None,
     timeout: int = 60,
     verbose: bool = True
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
-    Obtiene todos los cambios de etapa para todas las órdenes de producción.
+    Obtiene todos los cambios de etapa para órdenes de producción.
     
     Args:
+        fecha_desde: Fecha inicial (YYYY-MM-DD) para filtrar log_vidrios_produccion
+        fecha_hasta: Fecha final (YYYY-MM-DD) para filtrar log_vidrios_produccion
         ordenes_especificas: Lista de órdenes específicas a consultar (opcional)
         timeout: Timeout en segundos
         verbose: Si mostrar logs de progreso
@@ -110,7 +131,11 @@ def fetch_all(
             if verbose:
                 print(f"📋 Usando {len(ordenes_unicas):,} órdenes específicas")
         else:
-            ordenes_unicas, success = get_ordenes_produccion_unicas(verbose=verbose)
+            ordenes_unicas, success = get_ordenes_produccion_unicas(
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                verbose=verbose
+            )
             if not success:
                 return [], False
         

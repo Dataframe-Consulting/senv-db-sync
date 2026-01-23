@@ -1,28 +1,48 @@
 """
 Controller: V_Log Cambios Etapa
 Orquesta la sincronización desde Oracle APEX a Supabase.
+
+IMPORTANTE: Este controller consulta cambios de etapa basándose en las órdenes
+de producción obtenidas de log_vidrios_produccion (con filtro de fecha).
 """
 
-from datetime import datetime
-from typing import Dict, Any
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 
 from controllers.v_log_cambios_etapa.components import get_data
 from controllers.v_log_cambios_etapa.components import transform_data
 from controllers.v_log_cambios_etapa.components import synchronize
 
 
-def sync(verbose: bool = True) -> Dict[str, Any]:
+def sync(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    dias_historico: int = 30,
+    full_sync: bool = False,
+    verbose: bool = True
+) -> Dict[str, Any]:
     """
     Función principal de sincronización.
     
+    Estrategia inteligente:
+    1. Si full_sync=True: sincroniza últimos N días completos (dias_historico)
+    2. Si fecha_desde/fecha_hasta: usa esas fechas específicas
+    3. Si no: sincronización INCREMENTAL desde última fecha en Supabase
+    
     Flujo:
-    1. Obtener información previa
-    2. Extraer datos del endpoint (con paginación)
-    3. Transformar a formato Supabase
-    4. Deduplicar
-    5. Sincronizar (UPSERT)
+    1. Obtener información previa de Supabase
+    2. Determinar rango de fechas (incremental o manual)
+    3. Obtener órdenes de log_vidrios_produccion (con filtro de fecha)
+    4. Consultar cambios_etapa para cada orden
+    5. Transformar a formato Supabase
+    6. Deduplicar
+    7. Sincronizar (UPSERT)
     
     Args:
+        fecha_desde: Fecha inicial (YYYY-MM-DD) - opcional
+        fecha_hasta: Fecha final (YYYY-MM-DD) - opcional
+        dias_historico: Días hacia atrás si full_sync o no hay datos previos (default: 30)
+        full_sync: Si True, fuerza sincronización completa (ignorando fecha en Supabase)
         verbose: Si mostrar logs de progreso
         
     Returns:
@@ -47,14 +67,62 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         
         # PASO 1: Información previa
         if verbose:
-            print("\n📊 Paso 1/4: Información actual...")
-        synchronize.get_last_sync_info(verbose=verbose)
+            print("\n📊 Paso 1/5: Información actual...")
+        sync_info = synchronize.get_last_sync_info(verbose=verbose)
         
-        # PASO 2: Extraer datos
+        # PASO 2: Determinar rango de fechas
         if verbose:
-            print("\n📥 Paso 2/4: Extrayendo datos del endpoint...")
+            print("\n📅 Paso 2/5: Determinando rango de fechas...")
         
-        records, success = get_data.fetch_all(verbose=verbose)
+        # Determinar fecha_desde
+        if fecha_desde:
+            # Usuario especificó fecha manualmente
+            if verbose:
+                print(f"   📅 Usando fecha manual: {fecha_desde}")
+        elif full_sync:
+            # Sincronización completa: últimos N días
+            fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+            fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
+            if verbose:
+                print(f"   🔄 Full sync: últimos {dias_historico} días (desde {fecha_desde})")
+        else:
+            # Sincronización incremental: desde última fecha en Supabase
+            last_modified = sync_info.get('last_modified')
+            if last_modified:
+                # Usar fecha de última modificación en Supabase
+                # Convertir a formato YYYY-MM-DD
+                if 'T' in last_modified:
+                    fecha_desde = last_modified.split('T')[0]
+                elif ' ' in last_modified:
+                    fecha_desde = last_modified.split(' ')[0]
+                else:
+                    fecha_desde = last_modified
+                
+                if verbose:
+                    print(f"   ⚡ Sincronización incremental desde última modificación: {fecha_desde}")
+            else:
+                # Primera sincronización: usar últimos N días
+                fecha_desde_obj = datetime.now() - timedelta(days=dias_historico)
+                fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
+                if verbose:
+                    print(f"   🆕 Primera sincronización: últimos {dias_historico} días (desde {fecha_desde})")
+        
+        # Determinar fecha_hasta
+        if not fecha_hasta:
+            fecha_hasta = datetime.now().strftime('%Y-%m-%d')
+        
+        if verbose:
+            print(f"   📅 Rango final: {fecha_desde} → {fecha_hasta}")
+        
+        # PASO 3: Extraer datos
+        if verbose:
+            print(f"\n📥 Paso 3/5: Extrayendo datos del endpoint...")
+        
+        records, success = get_data.fetch_all(
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            verbose=verbose
+        )
         
         if not success:
             result['error'] = "Error al extraer datos del endpoint"
@@ -68,9 +136,9 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
             result['success'] = True
             return result
         
-        # PASO 3: Transformar
+        # PASO 4: Transformar
         if verbose:
-            print(f"\n🔄 Paso 3/4: Transformando {len(records):,} registros...")
+            print(f"\n🔄 Paso 4/5: Transformando {len(records):,} registros...")
         
         transformed = transform_data.transform_all(records)
         
@@ -81,9 +149,9 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         # Deduplicar
         unique_records = transform_data.deduplicate_by_id(transformed)
         
-        # PASO 4: Sincronizar
+        # PASO 5: Sincronizar
         if verbose:
-            print(f"\n💾 Paso 4/4: Sincronizando a Supabase...")
+            print(f"\n💾 Paso 5/5: Sincronizando a Supabase...")
         
         synced_count = synchronize.sync_to_supabase(unique_records, verbose=verbose)
         
