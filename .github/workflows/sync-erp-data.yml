@@ -1,12 +1,12 @@
-name: Sincronización ERP APEX → Supabase (cada 6 horas)
+name: Sincronización ERP APEX → Supabase (cada 2 horas)
 
 on:
   # Ejecutar cada 6 horas (00:00, 06:00, 12:00, 18:00)
   schedule:
-    - cron: '0 */6 * * *'  # Cada 6 horas en punto
+    - cron: '0 */2 * * *'  # Cada 2 horas en punto
   
   # Permitir ejecución manual desde GitHub UI
-  workflow_dispatch:
+  workflow_dispatch:  
 
 jobs:
   sync-data:
