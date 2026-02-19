@@ -204,7 +204,8 @@ def fetch_all(
     fecha_hasta: Optional[str] = None,
     ordenes_especificas: Optional[List[int]] = None,
     timeout: int = 60,
-    verbose: bool = True
+    verbose: bool = True,
+    batch_callback=None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Obtiene todos los cambios de etapa.
