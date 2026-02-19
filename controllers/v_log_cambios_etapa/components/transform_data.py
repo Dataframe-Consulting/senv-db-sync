@@ -21,24 +21,27 @@ def parse_oracle_date(date_str: str | None) -> str | None:
 def transform_log_cambios_etapa(record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Transforma registros de v_log_cambios_etapa.
-    
-    URL Pattern: /v_log_cambios_etapa/{no_orden},{dec_seq},{vip_seq},{no_etapa}
-    ID Compuesto: {no_orden_produccion}_{dec_seq}_{vip_seq}_{no_etapa}
-    
+
+    Cada fila es un evento histórico de cambio de etapa. El ID incluye fec_modif
+    para preservar todos los eventos distintos como registros independientes
+    (clon fiel del origen).
+
+    ID Compuesto: {no_orden_produccion}_{dec_seq}_{vip_seq}_{no_etapa}_{fec_modif}
+
     Campos del API:
     - no_etapa, no_orden_produccion, no_cotizacion, dec_seq, vip_seq
     - no_insumo, no_insumo_final, usr_modif, fec_modif, status
     - no_etapa_actual, no_optimizacion, espesor, base, altura, m2
     - taladros_cot, canto_pulido, filo_muerto
     """
-    # Generar ID único compuesto basado en la URL del endpoint (SIN fecha para evitar duplicados)
     no_orden = record.get('no_orden_produccion')
     dec_seq = record.get('dec_seq')
     vip_seq = record.get('vip_seq')
     no_etapa = record.get('no_etapa')
-    
-    # Crear ID único que previene duplicados (sin fec_modif)
-    record_id = f"{no_orden}_{dec_seq}_{vip_seq}_{no_etapa}"
+    fec_modif_raw = parse_oracle_date(record.get('fec_modif'))
+
+    # ID incluye fec_modif para que cada evento histórico sea una fila única
+    record_id = f"{no_orden}_{dec_seq}_{vip_seq}_{no_etapa}_{fec_modif_raw}"
     
     return {
         'id': record_id,
@@ -50,7 +53,7 @@ def transform_log_cambios_etapa(record: Dict[str, Any]) -> Dict[str, Any]:
         'no_insumo': record.get('no_insumo'),
         'no_insumo_final': record.get('no_insumo_final'),
         'usr_modif': record.get('usr_modif'),
-        'fec_modif': parse_oracle_date(record.get('fec_modif')),
+        'fec_modif': fec_modif_raw,
         'status': record.get('status'),
         'no_etapa_actual': record.get('no_etapa_actual'),
         'no_optimizacion': record.get('no_optimizacion'),
@@ -83,10 +86,22 @@ def transform_all(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def deduplicate_by_id(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Deduplica por ID."""
-    unique = {r['id']: r for r in records if r.get('id')}
-    
-    if len(records) > len(unique):
-        print(f"⚠️  Duplicados removidos: {len(records) - len(unique)}")
-    
+    """
+    Elimina filas exactamente repetidas (mismo ID).
+
+    Como el ID incluye fec_modif, dos eventos distintos generan IDs distintos
+    y ambos se conservan. Solo se elimina si el API devuelve el mismo registro
+    más de una vez (duplicado real).
+    """
+    unique: Dict[str, Any] = {}
+    for r in records:
+        id_ = r.get('id')
+        if not id_:
+            continue
+        unique.setdefault(id_, r)  # conserva la primera ocurrencia
+
+    duplicates_removed = len(records) - len(unique)
+    if duplicates_removed > 0:
+        print(f"⚠️  Duplicados exactos removidos: {duplicates_removed}")
+
     return list(unique.values())

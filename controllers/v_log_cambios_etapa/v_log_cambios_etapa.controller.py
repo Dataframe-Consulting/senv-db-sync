@@ -73,7 +73,7 @@ def sync(
         # PASO 2: Determinar rango de fechas
         if verbose:
             print("\n📅 Paso 2/5: Determinando rango de fechas...")
-        
+
         # Determinar fecha_desde
         if fecha_desde:
             # Usuario especificó fecha manualmente
@@ -90,39 +90,89 @@ def sync(
             last_modified = sync_info.get('last_modified')
             if last_modified:
                 # Usar fecha de última modificación en Supabase
-                # Convertir a formato YYYY-MM-DD
                 if 'T' in last_modified:
                     fecha_desde = last_modified.split('T')[0]
                 elif ' ' in last_modified:
                     fecha_desde = last_modified.split(' ')[0]
                 else:
                     fecha_desde = last_modified
-                
                 if verbose:
                     print(f"   ⚡ Sincronización incremental desde última modificación: {fecha_desde}")
             else:
-                # Primera sincronización: últimos 90 días
-                # Nota: Para v_log_cambios_etapa, 90 días es razonable porque:
-                # - Depende de log_vidrios_produccion (que sí carga todo en primera sync)
-                # - Los cambios de etapa de órdenes muy antiguas no son relevantes
-                # - Si se necesitan más, usar fecha_desde manual
-                fecha_desde_obj = datetime.now() - timedelta(days=90)
-                fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
+                # Tabla vacía → carga completa sin filtro de fecha
+                # Se usará el endpoint general de log_vidrios_produccion (todos los registros)
+                fecha_desde = None
+                fecha_hasta = None
                 if verbose:
-                    print(f"   🆕 Primera sincronización: últimos 90 días (desde {fecha_desde})")
-                    print(f"   ℹ️  Para cambios más antiguos, ejecutar con fecha_desde manual")
-        
-        # Determinar fecha_hasta
-        if not fecha_hasta:
+                    print("   🆕 Tabla vacía: carga completa histórica (sin filtro de fecha)")
+
+        # Determinar fecha_hasta (solo si no se forzó a None arriba)
+        if fecha_desde is not None and not fecha_hasta:
             fecha_hasta = datetime.now().strftime('%Y-%m-%d')
-        
+
         if verbose:
-            print(f"   📅 Rango final: {fecha_desde} → {fecha_hasta}")
+            if fecha_desde and fecha_hasta:
+                print(f"   📅 Rango final: {fecha_desde} → {fecha_hasta}")
+            else:
+                print("   📅 Rango final: COMPLETO (todos los registros disponibles)")
         
         # PASO 3: Extraer datos
         if verbose:
             print(f"\n📥 Paso 3/5: Extrayendo datos del endpoint...")
-        
+
+        # Carga completa (tabla vacía): modo streaming para no saturar RAM
+        is_full_load = (fecha_desde is None and fecha_hasta is None)
+
+        if is_full_load:
+            if verbose:
+                print("   🏦 Modo STREAMING: transformar + sincronizar por páginas (sin acumular en RAM)")
+
+            total_fetched  = 0
+            total_synced   = 0
+            total_dupes    = 0
+
+            def process_batch(raw_batch):
+                nonlocal total_fetched, total_synced, total_dupes
+                total_fetched += len(raw_batch)
+                transformed   = transform_data.transform_all(raw_batch)
+                unique        = transform_data.deduplicate_by_id(transformed)
+                total_dupes  += len(transformed) - len(unique)
+                synced        = synchronize.sync_to_supabase(unique, verbose=False)
+                total_synced += synced
+
+            _, success = get_data.fetch_all(
+                fecha_desde=None,
+                fecha_hasta=None,
+                verbose=verbose,
+                timeout=120,
+                batch_callback=process_batch,
+            )
+
+            if not success:
+                result['error'] = "Error al extraer datos del endpoint"
+                return result
+
+            if total_dupes > 0:
+                print(f"⚠️  Duplicados exactos removidos: {total_dupes:,}")
+
+            result['records_fetched'] = total_fetched
+            result['records_synced']  = total_synced
+            result['success'] = True
+
+            duration = (datetime.now() - start_time).total_seconds()
+            result['duration_seconds'] = duration
+
+            if verbose:
+                print("\n" + "="*70)
+                print("✅ COMPLETADO")
+                print(f"   📥 Extraídos:    {result['records_fetched']:,}")
+                print(f"   💾 Sincronizados: {result['records_synced']:,}")
+                print(f"   ⏱️  Duración:    {duration:.1f}s")
+                print("="*70)
+
+            return result
+
+        # Modo normal (incremental): acumula en memoria y luego sincroniza
         records, success = get_data.fetch_all(
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
