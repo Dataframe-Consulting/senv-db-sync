@@ -21,44 +21,50 @@ def parse_oracle_date(date_str: str | None) -> str | None:
         return None
 
 
-def transform_cotizacion(record: Dict[str, Any]) -> Dict[str, Any]:
+def transform_cotizacion(
+    record: Dict[str, Any],
+    fechas_entrega: Dict[int, str] | None = None
+) -> Dict[str, Any]:
     """
     Transforma un registro de cotización de Oracle APEX a formato Supabase.
-    
+
     Args:
         record: Registro en formato Oracle APEX
-        
+        fechas_entrega: Lookup {no_cotizacion: fecha_entrega_programada} obtenido
+                        de v_status_pedidos. Solo se incluye en el payload cuando
+                        existe una fecha para ese no_cotizacion.
+
     Returns:
         Registro transformado para Supabase
     """
-    # ID único: no_cotizacion (clave primaria natural)
-    record_id = str(record.get('no_cotizacion'))
-    
-    return {
+    no_cotizacion = record.get('no_cotizacion')
+    record_id = str(no_cotizacion)
+
+    transformed = {
         # Primary Key
         'id': record_id,
-        
+
         # Datos principales
-        'no_cotizacion': record.get('no_cotizacion'),
+        'no_cotizacion': no_cotizacion,
         'no_contacto': record.get('no_contacto'),
         'fecha': parse_oracle_date(record.get('fecha')),
         'no_cliente': record.get('no_cliente'),
         'status': record.get('status'),
         'no_proyecto': record.get('no_proyecto'),
-        
+
         # Detalles comerciales
         'comentarios': record.get('comentarios'),
         'solo_maquila': record.get('solo_maquila'),
         'pct_descuento': record.get('pct_descuento'),
         'no_emp_vendedor': record.get('no_emp_vendedor'),
-        
+
         # Fechas y referencias
         'fec_valorizacion': parse_oracle_date(record.get('fec_valorizacion')),
         'comprobante': record.get('comprobante'),
         'moneda': record.get('moneda'),
         'referencia': record.get('referencia'),
         'no_orden_compra': record.get('no_orden_compra'),
-        
+
         # Auditoría
         'fec_crea': parse_oracle_date(record.get('fec_crea')),
         'usr_crea': record.get('usr_crea'),
@@ -66,23 +72,49 @@ def transform_cotizacion(record: Dict[str, Any]) -> Dict[str, Any]:
         'usr_modif': record.get('usr_modif'),
     }
 
+    # Solo incluir fecha_entrega_programada si existe en el lookup,
+    # para no sobreescribir con NULL cotizaciones sin pedido activo.
+    if fechas_entrega and no_cotizacion in fechas_entrega:
+        transformed['fecha_entrega_programada'] = fechas_entrega[no_cotizacion]
 
-def transform_all(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return transformed
+
+
+def build_fechas_entrega_lookup(status_records: List[Dict[str, Any]]) -> Dict[int, str]:
+    """
+    Construye un dict {no_cotizacion: fecha_entrega_programada} a partir de los
+    registros crudos de v_status_pedidos. Solo incluye entradas con fec_prog_entrega
+    no nulo. Si hay varios pedidos del mismo no_cotizacion, se queda con el primero.
+    """
+    lookup: Dict[int, str] = {}
+    for r in status_records:
+        no_cot = r.get('no_cotizacion')
+        fec = r.get('fec_prog_entrega')
+        if no_cot and fec and no_cot not in lookup:
+            lookup[no_cot] = parse_oracle_date(fec)
+    return lookup
+
+
+def transform_all(
+    records: List[Dict[str, Any]],
+    fechas_entrega: Dict[int, str] | None = None
+) -> List[Dict[str, Any]]:
     """
     Transforma una lista de registros.
-    
+
     Args:
         records: Lista de registros en formato Oracle APEX
-        
+        fechas_entrega: Lookup opcional {no_cotizacion: fecha_entrega_programada}
+
     Returns:
         Lista de registros transformados
     """
     transformed = []
     errors = 0
-    
+
     for record in records:
         try:
-            transformed_record = transform_cotizacion(record)
+            transformed_record = transform_cotizacion(record, fechas_entrega)
             transformed.append(transformed_record)
         except Exception as e:
             errors += 1
