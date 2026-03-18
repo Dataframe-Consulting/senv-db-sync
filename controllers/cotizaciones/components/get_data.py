@@ -71,3 +71,39 @@ def fetch_all_cotizaciones(
         print(f"✅ Total obtenidos: {len(records):,} registros")
     
     return records, True
+
+
+# URL del endpoint de status de pedidos
+ENDPOINT_PATH_STATUS = 'v_status_pedidos'
+
+
+def fetch_all_status_pedidos(
+    timeout: int = 60,
+    verbose: bool = True
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Obtiene todos los registros de v_status_pedidos con paginación automática.
+    Solo se usa para extraer fec_prog_entrega por no_cotizacion.
+    """
+    url = f"{BASE_URL}/{ENDPOINT_PATH_STATUS}"
+
+    if verbose:
+        print(f"📥 Consultando: {url}")
+        print(f"   (con paginación automática)")
+
+    from utils.http_client import http_get_all_pages
+
+    records, success = http_get_all_pages(
+        url,
+        limit=1000,
+        timeout=timeout,
+        verbose=verbose
+    )
+
+    if not success:
+        return [], False
+
+    if verbose:
+        print(f"✅ Total obtenidos: {len(records):,} registros de status_pedidos")
+
+    return records, True

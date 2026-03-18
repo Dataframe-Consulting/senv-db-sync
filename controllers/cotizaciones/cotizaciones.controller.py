@@ -35,6 +35,7 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         'success': False,
         'records_fetched': 0,
         'records_synced': 0,
+        'fechas_entrega_actualizadas': 0,
         'duration_seconds': 0.0,
         'error': None
     }
@@ -47,12 +48,12 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         
         # PASO 1: Información previa
         if verbose:
-            print("\n📊 Paso 1/4: Información actual...")
+            print("\n📊 Paso 1/5: Información actual...")
         synchronize.get_last_sync_info(verbose=verbose)
         
         # PASO 2: Extraer datos
         if verbose:
-            print("\n📥 Paso 2/4: Extrayendo datos del endpoint...")
+            print("\n📥 Paso 2/5: Extrayendo datos del endpoint...")
         
         records, success = get_data.fetch_all_cotizaciones(verbose=verbose)
         
@@ -70,7 +71,7 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         
         # PASO 3: Transformar
         if verbose:
-            print(f"\n🔄 Paso 3/4: Transformando {len(records):,} registros...")
+            print(f"\n🔄 Paso 3/5: Transformando {len(records):,} registros...")
         
         transformed = transform_data.transform_all(records)
         
@@ -83,21 +84,33 @@ def sync(verbose: bool = True) -> Dict[str, Any]:
         
         # PASO 4: Sincronizar
         if verbose:
-            print(f"\n💾 Paso 4/4: Sincronizando a Supabase...")
-        
+            print(f"\n💾 Paso 4/5: Sincronizando a Supabase...")
+
         synced_count = synchronize.sync_to_supabase(unique_records, verbose=verbose)
-        
+
         result['records_synced'] = synced_count
+
+        # PASO 5: Actualizar fecha_entrega_programada desde v_status_pedidos
+        if verbose:
+            print(f"\n📅 Paso 5/5: Actualizando fechas de entrega programada...")
+
+        status_records, status_ok = get_data.fetch_all_status_pedidos(verbose=verbose)
+
+        if status_ok and status_records:
+            fechas_actualizadas = synchronize.sync_fecha_entrega(status_records, verbose=verbose)
+            result['fechas_entrega_actualizadas'] = fechas_actualizadas
+
         result['success'] = True
-        
+
         duration = (datetime.now() - start_time).total_seconds()
         result['duration_seconds'] = duration
-        
+
         if verbose:
             print("\n" + "="*70)
             print("✅ COMPLETADO")
             print(f"   📥 Extraídos: {result['records_fetched']:,}")
             print(f"   💾 Sincronizados: {result['records_synced']:,}")
+            print(f"   📅 Fechas entrega actualizadas: {result['fechas_entrega_actualizadas']:,}")
             print(f"   ⏱️  Duración: {duration:.1f}s")
             print("="*70)
         
